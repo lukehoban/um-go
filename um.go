@@ -7,17 +7,18 @@ import (
     "encoding/binary"
 )
 
-func read_platters(path string) []uint32 {
-    b, err := ioutil.ReadFile(path)
+func check(err error) {
     if err != nil {
         panic(err)
-    } 
-    buf := bytes.NewReader(b)
+    }    
+}
+
+func read_platters(path string) []uint32 {
+    b, err := ioutil.ReadFile(path)
+    check(err)
     platters := make([]uint32, len(b) / 4)
-    err = binary.Read(buf, binary.LittleEndian, &platters)
-    if err != nil {
-	    panic(err)
-    }
+    err = binary.Read(bytes.NewReader(b), binary.LittleEndian, &platters)
+    check(err)
     return platters
 }
 
