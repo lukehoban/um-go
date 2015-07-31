@@ -11,20 +11,10 @@ import (
 func run(program []uint32) {
     reg := [8]uint32{0,0,0,0,0,0,0,0}
     platters := [][]uint32{program}
+    freePlatters := []uint32{} 
     var pc uint32 = 0
     
-    iter := 0
-    
     for ;; {
-        
-        iter++
-        if iter % 10000000 == 0 {
-            fmt.Printf("len(platters) == %d\n", len(platters))
-            // for i:=0;i<len(platters);i++ {
-            //     fmt.Printf("len(platters[%d]) == %d\n", i, len(platters[i]))    
-            // }
-        }
-        
         instruction := platters[0][pc]
         op := (instruction >> 28) & 15
         a := ((instruction >> 6) & 7)
@@ -40,10 +30,17 @@ func run(program []uint32) {
             case 6: reg[a] = ^(reg[b] & reg[c])
             case 7: return
             case 8: { 
-                platters = append(platters, make([]uint32, reg[c])); 
-                reg[b] = uint32(len(platters) - 1) 
+                newPlatter := make([]uint32, reg[c])
+                if len(freePlatters) > 0 {
+                    platters[freePlatters[0]] = newPlatter
+                    reg[b] = freePlatters[0]
+                    freePlatters = freePlatters[1:]
+                } else {
+                    platters = append(platters, newPlatter); 
+                    reg[b] = uint32(len(platters) - 1)
+                } 
             }
-            case 9: { platters[reg[c]] = nil }
+            case 9: { platters[reg[c]] = nil; freePlatters = append(freePlatters, reg[c]) }
             case 10: os.Stdout.Write([]byte{byte(reg[c])})
             case 12: {
                 if reg[b] != 0 { 
