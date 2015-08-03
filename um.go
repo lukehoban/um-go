@@ -5,6 +5,7 @@ import (
     "fmt"
     "bytes"
     "os"
+    "flag"
     "encoding/binary"
 )
 
@@ -42,6 +43,7 @@ func run(program []uint32) {
             }
             case 9: { platters[reg[c]] = nil; freePlatters = append(freePlatters, reg[c]) }
             case 10: os.Stdout.Write([]byte{byte(reg[c])})
+            case 11: { b := []byte{0}; _, err := os.Stdin.Read(b); check(err); reg[c] = uint32(b[0]) }
             case 12: {
                 if reg[b] != 0 { 
                     platters[0] = make([]uint32, len(platters[reg[b]]))
@@ -55,8 +57,6 @@ func run(program []uint32) {
         }
         pc++
     }
-    
-    fmt.Printf("%A\n", reg)
 }
 
 func read_platters(path string) []uint32 {
@@ -75,7 +75,8 @@ func check(err error) {
 }
 
 func main() {
-    platters := read_platters("sandmark.umz")
-    fmt.Printf("Platters: %d\n", len(platters))
+    program := flag.String("program", "sandmark.umz", "The program to run on the Universal Machine.")
+    flag.Parse()
+    platters := read_platters(*program)
     run(platters)
 }
