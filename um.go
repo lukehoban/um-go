@@ -5,18 +5,37 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
+	"time"
 )
 
 func run(program []uint32) {
 
+	// State
 	reg := [8]uint32{0, 0, 0, 0, 0, 0, 0, 0}
 	platters := [][]uint32{program}
 	freePlatters := []uint32{}
 	var pc uint32
 
+	// Analytics
+	iteration := int64(0)
+	startTime := time.Now()
+	defer func() {
+		duration := time.Now().Sub(startTime)
+		fmt.Printf("\n\n** UM Execution Statistics **\n")
+		fmt.Printf("Ops/s: %d\n", (iteration*1e9)/duration.Nanoseconds())
+		totalArrayLength := 0
+		for _, arr := range platters {
+			totalArrayLength += len(arr)
+		}
+		fmt.Printf("Platters: %v, Free:  %v, TotalBytes: %v\n", len(platters), len(freePlatters), totalArrayLength*4)
+	}()
+
+	// Spin cycle
 	for {
+		iteration++
 		instruction := platters[0][pc]
 		op := (instruction >> 28) & 15
 		a := ((instruction >> 6) & 7)
@@ -39,7 +58,7 @@ func run(program []uint32) {
 			reg[a] = reg[b] / reg[c]
 		case 6:
 			reg[a] = ^(reg[b] & reg[c])
-		case 7:	
+		case 7:
 			return
 		case 8:
 			{
@@ -64,7 +83,13 @@ func run(program []uint32) {
 			{
 				b := []byte{0}
 				_, err := os.Stdin.Read(b)
-				check(err)
+				if err != nil {
+					if err == io.EOF {
+						reg[c] = uint32(0xffffffff)
+					} else {
+						panic("Failed to read from stdin.")
+					}
+				}
 				reg[c] = uint32(b[0])
 			}
 		case 12:
@@ -85,76 +110,27 @@ func run(program []uint32) {
 	}
 }
 
-func readPlatters(path string) []uint32 {
+func readPlatters(path string) ([]uint32, error) {
 	b, err := ioutil.ReadFile(path)
-	check(err)
+	if err != nil {
+		return nil, err
+	}
 	platters := make([]uint32, len(b)/4)
 	err = binary.Read(bytes.NewReader(b), binary.BigEndian, &platters)
-	check(err)
-	return platters
-}
-
-func check(err error) {
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-}
-
-func decompile(program []uint32) {
-	for i := range program {
-		instruction := program[i]
-		op := (instruction >> 28) & 15
-		a := ((instruction >> 6) & 7)
-		b := ((instruction >> 3) & 7)
-		c := ((instruction >> 0) & 7)
-		var text string
-		switch op {
-		case 0:
-			text = fmt.Sprintf("IF REG[%d] != 0 { REG[%d] = REG[%d] }", c, a, b)
-		case 1:
-			text = fmt.Sprintf("REG[%d] = PLATTERS[REG[%d]][REG[%d]]", a, b, c)
-		case 2:
-			text = fmt.Sprintf("PLATTERS[REG[%d]][REG[%d]] = REG[%d]", a, b, c)
-		case 3:
-			text = fmt.Sprintf("REG[%d] = REG[%d] + REG[%d]", a, b, c)
-		case 4:
-			text = fmt.Sprintf("REG[%d] = REG[%d] * REG[%d]", a, b, c)
-		case 5:
-			text = fmt.Sprintf("REG[%d] = REG[%d] / REG[%d]", a, b, c)
-		case 6:
-			text = fmt.Sprintf("REG[%d] = ^(REG[%d] & REG[%d])", a, b, c)
-		case 7:
-			text = fmt.Sprintf("HALT")
-		case 8:
-			text = fmt.Sprintf("REG[%d] = MALLOC(REG[%d])", b, c)
-		case 9:
-			text = fmt.Sprintf("ABND %d", c)
-		case 10:
-			text = fmt.Sprintf("OTPT %d", c)
-		case 11:
-			text = fmt.Sprintf("INPT %d", c)
-		case 12:
-			text = fmt.Sprintf("PLATTERS[0] = PLATTERS[REG[%d]]; GOTO REG[%d]", b, c)
-		case 13:
-			text = fmt.Sprintf("REG[%d] = %x", (instruction>>25)&7, instruction&0x01FFFFFFc)
-		}
-		fmt.Printf("[%08x] %08x: %s\n", i, instruction, text)
-	}
+	return platters, nil
 }
 
 func main() {
 	program := flag.String("program", "sandmark.umz", "The program to run on the Universal Machine.")
-	decomp := flag.Bool("decompile", false, "Decompile instead of execute.")
 	flag.Parse()
 
-	platters := readPlatters(*program)
-
-	// If -decompile, decompile the program instead of running
-	if *decomp {
-		decompile(platters)
-		return
+	platters, err := readPlatters(*program)
+	if err != nil {
+		panic("Could not read program")
 	}
 
-	// Else run
 	run(platters)
 }
